@@ -46,7 +46,7 @@ jobs:
     steps:
       - name: "✨ Create working dir"
         run: mkdir -p $kernelDir
-        
+
       - name: "⭐ Install prerequisites"
         run: |
           sudo apt-get update
@@ -78,7 +78,6 @@ jobs:
         working-directory: ./${{ env.kernelDir }}
         env:
           params: "${{ toJSON(matrix.repos.params) }}"
-          extraParams: "${{ toJSON(matrix.repos.extraParams) }}"
         run: |
           ARCH=$(echo $params | jq -r ".ARCH // empty")
           CROSS_COMPILE=$(echo $params | jq -r ".CROSS_COMPILE // empty")
@@ -87,11 +86,10 @@ jobs:
           CLANG_TRIPLE=$(echo $params | jq -r ".CLANG_TRIPLE // empty")
           AR=$(echo $params | jq -r ".AR // empty")
           CC=$(echo $params | jq -r ".CC // empty")
-          HOSTCC=$(echo $params | jq -r ".HOSTCC // empty")
 
           echo "ARCH=$ARCH" >> $GITHUB_ENV
           args="-j$(nproc --all)"
-          
+
           if [ -n "${{ env.OUT_DIR }}" ]; then
             mkdir -p $(pwd)/${{ env.OUT_DIR }}
             args="$args O=$(pwd)/${{ env.OUT_DIR }}"
@@ -102,10 +100,8 @@ jobs:
           [ -n "$CROSS_COMPILE_COMPAT" ] && args="$args CROSS_COMPILE_ARM32=$CROSS_COMPILE_COMPAT"
           [ -n "$AR" ] && args="$args AR=$AR"
           [ -n "$CC" ] && args="$args CC=$CC"
-          [ -n "$HOSTCC" ] && args="$args HOSTCC=$HOSTCC"
-          
+
           echo "args=$args" >> $GITHUB_OUTPUT
-          echo "extraParams_json=${{ toJSON(matrix.repos.extraParams) }}" >> $GITHUB_OUTPUT
 
       - name: "😋 Update KernelSU"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -132,17 +128,17 @@ jobs:
       - name: "🏴‍☠️ Inject NetHunter & AR9271 Modules"
         env:
           args: ${{ steps.generate-args.outputs.args }}
-          extraParams: ${{ steps.generate-args.outputs.extraParams_json }}
+          extraParams: ${{ toJSON(matrix.repos.extraParams) }}
         working-directory: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}
         run: |
           echo "Injecting NetHunter configs into .config..."
           echo "$extraParams" | jq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' >> .config
-          
+
           echo "Running olddefconfig to resolve dependencies..."
           make ${{ env.args }} olddefconfig
-          
+
           echo "--- Verifying Core NetHunter Modules ---"
-          grep -E "CONFIG_(ATH9K_HTC|MAC80211|CFG80211|USB_OTG|UHID|LOCALVERSION)=" .config || echo "Warning: Some modules may have been dropped by Kconfig dependencies."
+          grep -E "CONFIG_(ATH9K_HTC|MAC80211|CFG80211|USB_OTG|UHID|LOCALVERSION)=" .config || echo "Warning: some symbols dropped by Kconfig deps."
 
       - name: "🎶 Build kernel"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -156,17 +152,21 @@ jobs:
         working-directory: ./${{ env.kernelDir }}
         run: |
           echo "==================== ROOT CAUSE ===================="
-          grep -n -E "error:|Error 1|undefined reference|No rule to make|not found|fatal" build.log | head -n 20
-          first=$(grep -n -E "error:|undefined reference|No rule to make" build.log | head -n 1 | cut -d: -f1)
-          if [ -n "$first" ]; then
-            echo "------------------- CONTEXT ------------------------"
-            start=$(( first > 15 ? first - 15 : 1 ))
-            sed -n "${start},$(( first + 20 ))p" build.log
+          if [ -f build.log ]; then
+            grep -n -E "error:|Error 1|undefined reference|No rule to make|not found|fatal" build.log | head -n 20
+            first=$(grep -n -E "error:|undefined reference|No rule to make" build.log | head -n 1 | cut -d: -f1)
+            if [ -n "$first" ]; then
+              echo "------------------- CONTEXT ------------------------"
+              start=$(( first > 15 ? first - 15 : 1 ))
+              sed -n "${start},$(( first + 20 ))p" build.log
+            fi
+          else
+            echo "build.log not found - failure happened BEFORE compilation."
+            echo "Inspect the ❌ step directly above this one."
           fi
           echo "====================================================="
-          exit 1
 
-      - name: "🏴‍☠️ Post Action "
+      - name: "🏴☠️ Post Action "
         run: |
           pwd
           find ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/ -type f
