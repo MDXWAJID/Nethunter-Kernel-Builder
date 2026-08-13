@@ -86,13 +86,15 @@ jobs:
           THREAD: $(nproc --all)
         run: |
           echo "PATH Variable: $PATH"
-          ARCH=$(echo $params | jq -r ".ARCH")
-          CROSS_COMPILE=$(echo $params | jq -r ".CROSS_COMPILE")
-          CROSS_COMPILE_COMPAT=$(echo $params | jq -r ".CROSS_COMPILE_COMPAT")
-          CROSS_COMPILE_ARM32=$(echo $params | jq -r ".CROSS_COMPILE_ARM32")
-          CLANG_TRIPLE=$(echo $params | jq -r ".CLANG_TRIPLE")
-          AR=$(echo $params | jq -r ".AR")
-          CC=$(echo $params | jq -r ".CC")
+          
+          # FIX: Added "// empty" to prevent jq from returning the literal string "null"
+          ARCH=$(echo $params | jq -r ".ARCH // empty")
+          CROSS_COMPILE=$(echo $params | jq -r ".CROSS_COMPILE // empty")
+          CROSS_COMPILE_COMPAT=$(echo $params | jq -r ".CROSS_COMPILE_COMPAT // empty")
+          CROSS_COMPILE_ARM32=$(echo $params | jq -r ".CROSS_COMPILE_ARM32 // empty")
+          CLANG_TRIPLE=$(echo $params | jq -r ".CLANG_TRIPLE // empty")
+          AR=$(echo $params | jq -r ".AR // empty")
+          CC=$(echo $params | jq -r ".CC // empty")
 
           echo "ARCH=$ARCH" >> $GITHUB_ENV
 
@@ -121,7 +123,9 @@ jobs:
           fi
           echo "args=$args" >> $GITHUB_OUTPUT
           echo "extraParams_toJson: $extraParams"
-          extra_params=$(echo $extraParams | jq -r ' to_entries[] | select(.value != "") | "\(.key)=\(.value)"' | tr "\n" " " | sed 's/ $//')
+          
+          # FIX: Added "!= null" check for extraParams
+          extra_params=$(echo $extraParams | jq -r ' to_entries[] | select(.value != null and .value != "") | "\(.key)=\(.value)"' | tr "\n" " " | sed 's/ $//')
           echo "args=$args $extra_params" >> $GITHUB_OUTPUT
 
       - name: "😋 Update KernelSU"
