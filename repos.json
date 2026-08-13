@@ -2,17 +2,12 @@
   {
     "kernelSource": {
       "name": "StormBreaker-Phoenix",
-      "repo": "https://github.com/stormbreaker-project/kernel_xiaomi_phoenix",
+      "repo": "stormbreaker-project/kernel_xiaomi_phoenix",
       "branch": "main",
       "device": "phoenix"
     },
     "withKernelSU": false,
     "toolchains": [
-      {
-        "repo": "https://googlesource.com",
-        "branch": "master",
-        "name": "gas"
-      },
       {
         "repo": "https://github.com",
         "branch": "master",
@@ -24,3 +19,4 @@
     }
   }
 ]
+
