@@ -2,21 +2,51 @@
   {
     "kernelSource": {
       "name": "StormBreaker-Phoenix",
-      "repo": "stormbreaker-project/kernel_xiaomi_phoenix",
+      "repo": "https://github.com/stormbreaker-project/kernel_xiaomi_phoenix",
       "branch": "main",
       "device": "phoenix"
     },
     "withKernelSU": false,
     "toolchains": [
       {
-        "repo": "https://github.com",
+        "repo": "https://android.googlesource.com/platform/prebuilts/gas/linux-x86",
         "branch": "master",
+        "name": "gas"
+      },
+      {
+        "repo": "https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone/",
+        "branch": "11",
         "name": "clang"
       }
     ],
     "params": {
-      "extra_defs": "CONFIG_LOCALVERSION=\"-StormBreaker-NetHunter\" CONFIG_WIRELESS=y CONFIG_MAC80211=y CONFIG_CFG80211=y CONFIG_ATH_CARDS=y CONFIG_ATH9K_HW=y CONFIG_ATH9K_COMMON=y CONFIG_ATH9K_HTC=y CONFIG_ATH9K_HTC_DBGPRINT=y"
+      "ARCH": "arm64",
+      "CROSS_COMPILE": "aarch64-linux-gnu-",
+      "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
+      "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
+      "CLANG_TRIPLE": "aarch64-linux-gnu-",
+      "CC": "clang"
+    },
+    "extraParams": {
+      "CONFIG_LOCALVERSION": "\"-StormBreaker-NetHunter\"",
+      "CONFIG_WIRELESS": "y",
+      "CONFIG_MAC80211": "y",
+      "CONFIG_CFG80211": "y",
+      "CONFIG_ATH_CARDS": "y",
+      "CONFIG_ATH9K_HW": "y",
+      "CONFIG_ATH9K_COMMON": "y",
+      "CONFIG_ATH9K_HTC": "y",
+      "CONFIG_ATH9K_HTC_DBGPRINT": "y",
+      "CONFIG_RTL88XXAU": "m",
+      "CONFIG_RTL8192EU": "m",
+      "CONFIG_RTL8192CU": "m",
+      "CONFIG_USB_NET_DRIVERS": "y",
+      "CONFIG_USB_RTL8150": "m",
+      "CONFIG_USB_RTL8152": "m",
+      "CONFIG_UHID": "m",
+      "CONFIG_MACVLAN": "y",
+      "CONFIG_NETFILTER": "y",
+      "CONFIG_NF_CONNTRACK": "y"
     }
   }
 ]
-
