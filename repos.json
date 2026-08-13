@@ -2,7 +2,7 @@
   {
     "kernelSource": {
       "name": "StormBreaker-Phoenix",
-      "repo": "https://github.com",
+      "repo": "https://github.com/stormbreaker-project/kernel_xiaomi_phoenix",
       "branch": "twelve",
       "device": "phoenix"
     },
