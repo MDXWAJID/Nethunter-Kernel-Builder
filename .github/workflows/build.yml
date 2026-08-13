@@ -123,10 +123,9 @@ jobs:
           fi
           echo "args=$args" >> $GITHUB_OUTPUT
           echo "extraParams_toJson: $extraParams"
-          
-          # FIX: Added "!= null" check for extraParams
-          extra_params=$(echo $extraParams | jq -r ' to_entries[] | select(.value != null and .value != "") | "\(.key)=\(.value)"' | tr "\n" " " | sed 's/ $//')
-          echo "args=$args $extra_params" >> $GITHUB_OUTPUT
+          # NOTE: CONFIG_* flags are injected ONLY via .config + olddefconfig
+          # in the "Before Action" step. Passing them on the make command line
+          # desyncs auto.conf from autoconf.h and breaks the final vmlinux link.
 
       - name: "😋 Update KernelSU"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
