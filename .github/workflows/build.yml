@@ -68,6 +68,14 @@ jobs:
             repo=$(echo $toolchains | jq -r ".[$i].repo")
             branch=$(echo $toolchains | jq -r ".[$i].branch")
             git clone --recursive --branch $branch $repo $name --depth=1
+            
+            # PRO FIX: Disable the toolchain's 'ld' to prevent host linking errors 
+            # on Ubuntu 22.04/24.04 (RELR section incompatibility).
+            if [ -f "$(pwd)/$name/bin/ld" ]; then
+              mv "$(pwd)/$name/bin/ld" "$(pwd)/$name/bin/ld.disabled"
+              echo "Disabled incompatible toolchain 'ld' for host builds."
+            fi
+
             echo "$(pwd)/$name/" >> $GITHUB_PATH
             echo "$(pwd)/$name/bin" >> $GITHUB_PATH
           done
@@ -86,6 +94,7 @@ jobs:
           CLANG_TRIPLE=$(echo $params | jq -r ".CLANG_TRIPLE // empty")
           AR=$(echo $params | jq -r ".AR // empty")
           CC=$(echo $params | jq -r ".CC // empty")
+          LD=$(echo $params | jq -r ".LD // empty")
 
           echo "ARCH=$ARCH" >> $GITHUB_ENV
           args="-j$(nproc --all)"
@@ -100,6 +109,7 @@ jobs:
           [ -n "$CROSS_COMPILE_COMPAT" ] && args="$args CROSS_COMPILE_ARM32=$CROSS_COMPILE_COMPAT"
           [ -n "$AR" ] && args="$args AR=$AR"
           [ -n "$CC" ] && args="$args CC=$CC"
+          [ -n "$LD" ] && args="$args LD=$LD"
 
           echo "args=$args" >> $GITHUB_OUTPUT
 
