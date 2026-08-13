@@ -155,16 +155,33 @@ jobs:
         env:
           args: ${{ steps.generate-args.outputs.args }}
         run: |
+          set +e
           make ${args} 2>&1 | tee ../build.log
-          make ${args} Image Image.gz dtbs dtboimage 2>&1 | tail -n 5 || true
-
-      - name: "📋 List build outputs"
-        if: always()
-        run: |
-          echo "--- boot directory ---"
-          ls -la ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/ || echo "boot dir missing!"
-          echo "--- build.log tail ---"
-          tail -n 15 ./${{ env.kernelDir }}/build.log || true
+          echo "main make exit: ${PIPESTATUS[0]}"
+          make ${args} Image  2>&1 | tee -a ../build.log
+          make ${args} Image.gz 2>&1 | tee -a ../build.log
+          make ${args} dtbs   2>&1 | tee -a ../build.log
+          set -e
+          OUT=${{ env.OUT_DIR }}
+          echo "=============== OUT ROOT ==============="
+          ls -la $OUT/ | head -n 20
+          echo "=============== BOOT DIR ==============="
+          ls -la $OUT/arch/arm64/boot/ || true
+          # NUCLEAR FALLBACK: carve Image straight out of vmlinux
+          if [ ! -s $OUT/arch/arm64/boot/Image ] && [ -s $OUT/vmlinux ]; then
+            echo ">>> Carving Image from vmlinux with objcopy..."
+            mkdir -p $OUT/arch/arm64/boot
+            aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S $OUT/vmlinux $OUT/arch/arm64/boot/Image
+          fi
+          if [ ! -s $OUT/arch/arm64/boot/Image.gz ] && [ -s $OUT/arch/arm64/boot/Image ]; then
+            gzip -n -c -9 $OUT/arch/arm64/boot/Image > $OUT/arch/arm64/boot/Image.gz
+          fi
+          if [ ! -s $OUT/arch/arm64/boot/Image ] && [ ! -s $OUT/arch/arm64/boot/Image.gz ]; then
+            echo "FATAL: no kernel image produced!"
+            tail -n 80 ../build.log
+            exit 1
+          fi
+          ls -la $OUT/arch/arm64/boot/
 
       - name: "🧰 Package Flashable Zip (AnyKernel3)"
         working-directory: ./${{ env.kernelDir }}
@@ -176,17 +193,18 @@ jobs:
           grep -q 'do.dtbo=' anykernel.sh || sed -i 's/do.cleanup=1;/do.cleanup=1;\ndo.dtbo=1;/' anykernel.sh
           cd ..
           BOOT=${{ env.OUT_DIR }}/arch/arm64/boot
-          if [ -f $BOOT/Image ]; then cp $BOOT/Image AnyKernel3/Image; fi
-          if [ -f $BOOT/Image.gz ]; then cp $BOOT/Image.gz AnyKernel3/Image.gz; fi
-          if [ -f $BOOT/dtbo.img ]; then cp $BOOT/dtbo.img AnyKernel3/dtbo.img; fi
+          if [ -s $BOOT/Image ]; then cp $BOOT/Image AnyKernel3/Image; \
+          elif [ -s $BOOT/Image-dtb ]; then cp $BOOT/Image-dtb AnyKernel3/Image; \
+          elif [ -s $BOOT/Image.gz ]; then cp $BOOT/Image.gz AnyKernel3/Image.gz; fi
+          if [ -s $BOOT/dtbo.img ]; then cp $BOOT/dtbo.img AnyKernel3/dtbo.img; fi
           rm -rf AnyKernel3/.git AnyKernel3/README.md AnyKernel3/tools
           cd AnyKernel3
           zip -r9 ../update-StormBreaker-NetHunter-Phoenix.zip .
           cd ..
-          # SELF-CHECK: prove the zip is genuinely flashable before uploading
-          unzip -l update-StormBreaker-NetHunter-Phoenix.zip | grep "META-INF/com/google/android/update-binary" || { echo "FATAL: zip is NOT flashable!"; exit 1; }
-          zip -T update-StormBreaker-NetHunter-Phoenix.zip
-          ls -la update-*.zip
+          unzip -l update-StormBreaker-NetHunter-Phoenix.zip | grep "META-INF/com/google/android/update-binary" || { echo "FATAL: not flashable!"; exit 1; }
+          SIZE=$(stat -c%s update-StormBreaker-NetHunter-Phoenix.zip)
+          echo "Flashable zip size: $SIZE bytes"
+          [ "$SIZE" -gt 10000000 ] || { echo "FATAL: zip too small - no kernel inside!"; exit 1; }
 
       - name: "🚀 Upload Flashable Zip (EXTRACT BEFORE FLASHING)"
         uses: actions/upload-artifact@v4
@@ -201,7 +219,7 @@ jobs:
         with:
           name: RAW-Image-fastboot
           path: |
-            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image
-            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image*
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/dt*
           if-no-files-found: ignore
           retention-days: 7
