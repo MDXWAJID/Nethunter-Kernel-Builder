@@ -149,18 +149,40 @@ jobs:
           args: ${{ steps.generate-args.outputs.args }}
         run: |
           echo "PATH Variable: $PATH"
-          make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
+          
+          # Fix for defconfig in subdirectories (e.g., vendor/phoenix_defconfig)
+          if [[ "${{ env.DEFCONFIG_NAME }}" == *"/"* ]]; then
+            dir_path=$(dirname "${{ env.DEFCONFIG_NAME }}")
+            file_name=$(basename "${{ env.DEFCONFIG_NAME }}")
+            echo "Defconfig is in a subfolder (${dir_path}). Copying to root configs..."
+            cp arch/${{ env.ARCH }}/configs/${dir_path}/${file_name} arch/${{ env.ARCH }}/configs/${file_name}
+            make ${{ env.args }} ${file_name}
+          else
+            make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
+          fi
 
-      - name: "🏴‍☠️ Before Action "
+      - name: "🏴‍☠️ Before Action (Inject NetHunter Modules)"
         env:
-            args: ${{ steps.generate-args.outputs.args }}
+          args: ${{ steps.generate-args.outputs.args }}
+          extraParams: "${{ toJSON(matrix.repos.extraParams) }}"
         working-directory: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}
         run: |
           echo "args ---> ${args}"
           echo "current path ---> $(pwd)"
+          
+          # 1. Inject default configs
           echo "CONFIG_OF_CONFIGFS=y" >> .config
           echo "CONFIG_OF_OVERLAY=y" >> .config
-          cat .config
+          
+          # 2. Inject all Kali NetHunter extraParams into .config
+          echo "$extraParams" | jq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' >> .config
+          
+          # 3. Run olddefconfig to automatically resolve and enable all hidden Kconfig dependencies!
+          make ${{ env.args }} olddefconfig
+          
+          # 4. Verify
+          echo "--- Verifying NetHunter Modules ---"
+          grep -E "CONFIG_(WIRELESS|MAC80211|CFG80211|ATH|RTL|UHID|NETFILTER|LOCALVERSION|BT)" .config | head -n 20 || true
           
       - name: "🎶 Build kernel"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
