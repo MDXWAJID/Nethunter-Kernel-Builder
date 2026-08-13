@@ -176,27 +176,32 @@ jobs:
           grep -q 'do.dtbo=' anykernel.sh || sed -i 's/do.cleanup=1;/do.cleanup=1;\ndo.dtbo=1;/' anykernel.sh
           cd ..
           BOOT=${{ env.OUT_DIR }}/arch/arm64/boot
-          [ -f $BOOT/Image ] && cp $BOOT/Image AnyKernel3/Image
-          [ -f $BOOT/Image.gz ] && cp $BOOT/Image.gz AnyKernel3/Image.gz
-          [ -f $BOOT/dtbo.img ] && cp $BOOT/dtbo.img AnyKernel3/dtbo.img
+          if [ -f $BOOT/Image ]; then cp $BOOT/Image AnyKernel3/Image; fi
+          if [ -f $BOOT/Image.gz ]; then cp $BOOT/Image.gz AnyKernel3/Image.gz; fi
+          if [ -f $BOOT/dtbo.img ]; then cp $BOOT/dtbo.img AnyKernel3/dtbo.img; fi
           rm -rf AnyKernel3/.git AnyKernel3/README.md AnyKernel3/tools
-          cd AnyKernel3 && zip -r9 ../StormBreaker-NetHunter-Phoenix-FLASHABLE.zip . && cd ..
-          ls -la StormBreaker-NetHunter-Phoenix-FLASHABLE.zip
+          cd AnyKernel3
+          zip -r9 ../update-StormBreaker-NetHunter-Phoenix.zip .
+          cd ..
+          # SELF-CHECK: prove the zip is genuinely flashable before uploading
+          unzip -l update-StormBreaker-NetHunter-Phoenix.zip | grep "META-INF/com/google/android/update-binary" || { echo "FATAL: zip is NOT flashable!"; exit 1; }
+          zip -T update-StormBreaker-NetHunter-Phoenix.zip
+          ls -la update-*.zip
 
-      - name: "🚀 Upload Flashable Zip"
+      - name: "🚀 Upload Flashable Zip (EXTRACT BEFORE FLASHING)"
         uses: actions/upload-artifact@v4
         with:
-          name: StormBreaker-NetHunter-Phoenix-FLASHABLE
-          path: ./${{ env.kernelDir }}/StormBreaker-NetHunter-Phoenix-FLASHABLE.zip
+          name: FLASHABLE-extract-me-first
+          path: ./${{ env.kernelDir }}/update-StormBreaker-NetHunter-Phoenix.zip
           if-no-files-found: error
           retention-days: 7
 
-      - name: "📦 Upload Raw Kernel Files (debug)"
+      - name: "📦 Upload RAW Image (fastboot fallback)"
         uses: actions/upload-artifact@v4
         with:
-          name: StormBreaker-NetHunter-Phoenix-RAW
+          name: RAW-Image-fastboot
           path: |
-            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image*
-            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/dt*
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz
           if-no-files-found: ignore
           retention-days: 7
