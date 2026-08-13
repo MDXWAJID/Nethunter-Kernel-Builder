@@ -21,7 +21,8 @@
       "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
       "CLANG_TRIPLE": "aarch64-linux-gnu-",
       "CC": "clang",
-      "AR": "llvm-ar"
+      "AR": "llvm-ar",
+      "LD": "ld.lld"
     },
     "extraParams": {
       "CONFIG_LOCALVERSION": "\"-StormBreaker-NetHunter\"",
