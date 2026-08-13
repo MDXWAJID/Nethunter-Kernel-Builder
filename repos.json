@@ -22,7 +22,7 @@
       "CLANG_TRIPLE": "aarch64-linux-gnu-",
       "CC": "clang",
       "AR": "llvm-ar",
-      "LD": "ld.lld"
+      "LD": "aarch64-linux-gnu-ld"
     },
     "extraParams": {
       "CONFIG_LOCALVERSION": "\"-StormBreaker-NetHunter\"",
