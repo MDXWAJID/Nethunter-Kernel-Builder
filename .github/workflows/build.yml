@@ -68,14 +68,10 @@ jobs:
             repo=$(echo $toolchains | jq -r ".[$i].repo")
             branch=$(echo $toolchains | jq -r ".[$i].branch")
             git clone --recursive --branch $branch $repo $name --depth=1
-            
-            # PRO FIX: Disable the toolchain's 'ld' to prevent host linking errors 
-            # on Ubuntu 22.04/24.04 (RELR section incompatibility).
             if [ -f "$(pwd)/$name/bin/ld" ]; then
               mv "$(pwd)/$name/bin/ld" "$(pwd)/$name/bin/ld.disabled"
-              echo "Disabled incompatible toolchain 'ld' for host builds."
+              echo "Disabled incompatible toolchain ld."
             fi
-
             echo "$(pwd)/$name/" >> $GITHUB_PATH
             echo "$(pwd)/$name/bin" >> $GITHUB_PATH
           done
@@ -98,7 +94,6 @@ jobs:
 
           echo "ARCH=$ARCH" >> $GITHUB_ENV
           args="-j$(nproc --all)"
-
           if [ -n "${{ env.OUT_DIR }}" ]; then
             mkdir -p $(pwd)/${{ env.OUT_DIR }}
             args="$args O=$(pwd)/${{ env.OUT_DIR }}"
@@ -110,16 +105,7 @@ jobs:
           [ -n "$AR" ] && args="$args AR=$AR"
           [ -n "$CC" ] && args="$args CC=$CC"
           [ -n "$LD" ] && args="$args LD=$LD"
-
           echo "args=$args" >> $GITHUB_OUTPUT
-
-      - name: "😋 Update KernelSU"
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        if: ${{ env.withKernelSU == 'true' }}
-        run: |
-          [ -d "./KernelSU" ] && rm -rf "./KernelSU"
-          [ -d "./drivers/kernelsu" ] && rm -rf "./drivers/kernelsu"
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
       - name: "👍 Make defconfig"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -141,14 +127,10 @@ jobs:
           extraParams: ${{ toJSON(matrix.repos.extraParams) }}
         working-directory: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}
         run: |
-          echo "Injecting NetHunter configs into .config..."
           echo "$extraParams" | jq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' >> .config
-
-          echo "Running olddefconfig to resolve dependencies..."
           make ${{ env.args }} olddefconfig
-
-          echo "--- Verifying Core NetHunter Modules ---"
-          grep -E "CONFIG_(ATH9K_HTC|MAC80211|CFG80211|USB_OTG|UHID|LOCALVERSION)=" .config || echo "Warning: some symbols dropped by Kconfig deps."
+          echo "--- Locked NetHunter configs ---"
+          grep -E "CONFIG_(ATH9K_HTC|MAC80211|CFG80211|USB_OTG|UHID|LEDS_CLASS|USB_USBNET|LOCALVERSION)=" .config || true
 
       - name: "🎶 Build kernel"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -157,34 +139,30 @@ jobs:
         run: |
           set +e
           make ${args} 2>&1 | tee ../build.log
-          echo "main make exit: ${PIPESTATUS[0]}"
-          make ${args} Image  2>&1 | tee -a ../build.log
-          make ${args} Image.gz 2>&1 | tee -a ../build.log
-          make ${args} dtbs   2>&1 | tee -a ../build.log
+          echo ">>> main make exit: ${PIPESTATUS[0]}"
+          make ${args} Image    2>&1 | tee -a ../build.log || true
+          make ${args} Image.gz 2>&1 | tee -a ../build.log || true
+          make ${args} dtbs     2>&1 | tee -a ../build.log || true
           set -e
           OUT=${{ env.OUT_DIR }}
-          echo "=============== OUT ROOT ==============="
-          ls -la $OUT/ | head -n 20
           echo "=============== BOOT DIR ==============="
           ls -la $OUT/arch/arm64/boot/ || true
-          # NUCLEAR FALLBACK: carve Image straight out of vmlinux
           if [ ! -s $OUT/arch/arm64/boot/Image ] && [ -s $OUT/vmlinux ]; then
-            echo ">>> Carving Image from vmlinux with objcopy..."
-            mkdir -p $OUT/arch/arm64/boot
+            echo ">>> Carving Image from vmlinux..."
             aarch64-linux-gnu-objcopy -O binary -R .note -R .note.gnu.build-id -R .comment -S $OUT/vmlinux $OUT/arch/arm64/boot/Image
           fi
           if [ ! -s $OUT/arch/arm64/boot/Image.gz ] && [ -s $OUT/arch/arm64/boot/Image ]; then
             gzip -n -c -9 $OUT/arch/arm64/boot/Image > $OUT/arch/arm64/boot/Image.gz
           fi
           if [ ! -s $OUT/arch/arm64/boot/Image ] && [ ! -s $OUT/arch/arm64/boot/Image.gz ]; then
-            echo "FATAL: no kernel image produced!"
-            echo "########## FIRST REAL ERRORS ##########"
-            grep -n -m 15 -E "error:|undefined reference|Error 1|cannot find|fatal" ../build.log
-            echo "########## LOG TAIL ##########"
-            tail -n 80 ../build.log
+            echo "################ FATAL: NO KERNEL IMAGE ################"
+            grep -n -m 20 -E "error:|undefined reference|Error 1|cannot find|fatal" ../build.log
+            echo "################ LOG TAIL ################"
+            tail -n 40 ../build.log
             exit 1
           fi
-          ls -la $OUT/arch/arm64/boot/
+          echo ">>> KERNEL IMAGE READY:"
+          ls -la $OUT/arch/arm64/boot/Image*
 
       - name: "🧰 Package Flashable Zip (AnyKernel3)"
         working-directory: ./${{ env.kernelDir }}
@@ -224,5 +202,14 @@ jobs:
           path: |
             ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image*
             ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/dt*
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: "🧾 Upload build.log (only on failure)"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BUILD-LOG-READ-ME
+          path: ./${{ env.kernelDir }}/build.log
           if-no-files-found: ignore
           retention-days: 7
