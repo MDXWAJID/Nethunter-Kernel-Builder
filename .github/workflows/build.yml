@@ -178,6 +178,9 @@ jobs:
           fi
           if [ ! -s $OUT/arch/arm64/boot/Image ] && [ ! -s $OUT/arch/arm64/boot/Image.gz ]; then
             echo "FATAL: no kernel image produced!"
+            echo "########## FIRST REAL ERRORS ##########"
+            grep -n -m 15 -E "error:|undefined reference|Error 1|cannot find|fatal" ../build.log
+            echo "########## LOG TAIL ##########"
             tail -n 80 ../build.log
             exit 1
           fi
