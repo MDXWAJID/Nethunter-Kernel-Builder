@@ -1,32 +1,26 @@
-[ {
+[
+  {
     "kernelSource": {
-        "name": "PixelExperience-Phoenix",
-        "repo": "https://github.com",
-        "branch": "twelve",
-        "device": "phoenix"
+      "name": "StormBreaker-Phoenix",
+      "repo": "https://github.com",
+      "branch": "twelve",
+      "device": "phoenix"
     },
     "withKernelSU": false,
     "toolchains": [
-        {
-            "repo": "https://googlesource.com",
-            "branch": "master",
-            "name": "gas"
-        },
-        {
-            "repo": "https://github.com",
-            "branch": "master",
-            "name": "clang"
-        }
+      {
+        "repo": "https://googlesource.com",
+        "branch": "master",
+        "name": "gas"
+      },
+      {
+        "repo": "https://github.com",
+        "branch": "master",
+        "name": "clang"
+      }
     ],
     "params": {
-        "ARCH": "arm64",
-        "CROSS_COMPILE": "aarch64-linux-gnu-",
-        "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
-        "CC": "clang"
-    },
-    "anykernel3": {
-        "repo": "https://github.com",
-        "branch": "master"
+      "extra_defs": "CONFIG_LOCALVERSION=\"-StormBreaker-NetHunter\" CONFIG_WIRELESS=y CONFIG_MAC80211=y CONFIG_CFG80211=y CONFIG_ATH_CARDS=y CONFIG_ATH9K_HW=y CONFIG_ATH9K_COMMON=y CONFIG_ATH9K_HTC=y CONFIG_ATH9K_HTC_DBGPRINT=y"
     }
-} ]
-
+  }
+]
