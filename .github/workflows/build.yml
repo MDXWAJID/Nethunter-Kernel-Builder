@@ -156,59 +156,26 @@ jobs:
           args: ${{ steps.generate-args.outputs.args }}
         run: |
           make ${args} 2>&1 | tee ../build.log
+          # Explicitly build boot images & DTBs (some trees' default target only links vmlinux)
+          make ${args} Image Image.gz dtbs 2>&1 | tail -n 5 || true
 
-      - name: "🔍 Autopsy: Show Root Error on Failure"
-        if: failure()
-        working-directory: ./${{ env.kernelDir }}
+      - name: "📋 List build outputs"
+        if: always()
         run: |
-          echo "==================== ROOT CAUSE ===================="
-          if [ -f build.log ]; then
-            grep -n -E "error:|Error 1|undefined reference|No rule to make|not found|fatal" build.log | head -n 20
-            first=$(grep -n -E "error:|undefined reference|No rule to make" build.log | head -n 1 | cut -d: -f1)
-            if [ -n "$first" ]; then
-              echo "------------------- CONTEXT ------------------------"
-              start=$(( first > 15 ? first - 15 : 1 ))
-              sed -n "${start},$(( first + 20 ))p" build.log
-            fi
-          else
-            echo "build.log not found - failure happened BEFORE compilation."
-            echo "Inspect the ❌ step directly above this one."
-          fi
-          echo "====================================================="
+          echo "--- boot directory ---"
+          ls -la ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/ || echo "boot dir missing!"
+          echo "--- vmlinux ---"
+          ls -la ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/vmlinux || echo "vmlinux missing!"
+          echo "--- build.log tail ---"
+          tail -n 15 ./${{ env.kernelDir }}/build.log || true
 
-      - name: "🏴☠️ Post Action "
-        run: |
-          pwd
-          find ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/ -type f
-
-      - name: "💛 Upload Image"
+      - name: "📦 Upload NetHunter Kernel Artifacts"
         uses: actions/upload-artifact@v4
         with:
-          name: Image-${{ env.kernelDevice }}-${{ env.kernelName }}
-          path: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "💙 Upload Image.gz"
-        uses: actions/upload-artifact@v4
-        with:
-          name: Image.gz-${{ env.kernelDevice }}-${{ env.kernelName }}
-          path: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image.gz
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "💜 Upload dtb"
-        uses: actions/upload-artifact@v4
-        with:
-          name: dtb-${{ env.kernelDevice }}-${{ env.kernelName }}
-          path: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtb
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "❤️ Upload dtbo.img"
-        uses: actions/upload-artifact@v4
-        with:
-          name: dtbo-${{ env.kernelDevice }}-${{ env.kernelName }}
-          path: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/dtbo.img
-          if-no-files-found: ignore
+          name: StormBreaker-NetHunter-Phoenix
+          path: |
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image*
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/dt*
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/vmlinux
+          if-no-files-found: error
           retention-days: 7
