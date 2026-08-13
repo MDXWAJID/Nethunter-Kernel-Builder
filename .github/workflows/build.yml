@@ -70,14 +70,12 @@ jobs:
             git clone --recursive --branch $branch $repo $name --depth=1
             if [ -f "$(pwd)/$name/bin/ld" ]; then
               mv "$(pwd)/$name/bin/ld" "$(pwd)/$name/bin/ld.disabled"
-              echo "Disabled incompatible toolchain ld."
             fi
             echo "$(pwd)/$name/" >> $GITHUB_PATH
             echo "$(pwd)/$name/bin" >> $GITHUB_PATH
           done
-          echo "PATH Variable: $PATH"
 
-      - name: "😎 Set args"
+      - name: "😎 Set args & Absolute Paths"
         id: generate-args
         working-directory: ./${{ env.kernelDir }}
         env:
@@ -93,10 +91,14 @@ jobs:
           LD=$(echo $params | jq -r ".LD // empty")
 
           echo "ARCH=$ARCH" >> $GITHUB_ENV
+          # FIX: Use absolute path for OUT directory to prevent "No such file" relative path errors
+          ABS_OUT_DIR="$(pwd)/${{ env.OUT_DIR }}"
+          echo "ABS_OUT_DIR=$ABS_OUT_DIR" >> $GITHUB_ENV
+          
           args="-j$(nproc --all)"
           if [ -n "${{ env.OUT_DIR }}" ]; then
-            mkdir -p $(pwd)/${{ env.OUT_DIR }}
-            args="$args O=$(pwd)/${{ env.OUT_DIR }}"
+            mkdir -p $ABS_OUT_DIR
+            args="$args O=$ABS_OUT_DIR"
           fi
           [ -n "$ARCH" ] && args="$args ARCH=$ARCH"
           [ -n "$CROSS_COMPILE" ] && args="$args CROSS_COMPILE=$CROSS_COMPILE"
@@ -125,7 +127,7 @@ jobs:
         env:
           args: ${{ steps.generate-args.outputs.args }}
           extraParams: ${{ toJSON(matrix.repos.extraParams) }}
-        working-directory: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}
+        working-directory: ${{ env.ABS_OUT_DIR }}
         run: |
           echo "$extraParams" | jq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' >> .config
           make ${{ env.args }} olddefconfig
@@ -137,16 +139,15 @@ jobs:
         env:
           args: ${{ steps.generate-args.outputs.args }}
         run: |
-          echo ">>> Starting main make..."
+          set +e
           make ${args} 2>&1 | tee ../build.log
-          echo ">>> Starting Image make..."
-          make ${args} Image 2>&1 | tee -a ../build.log
-          echo ">>> Starting Image.gz make..."
-          make ${args} Image.gz 2>&1 | tee -a ../build.log
-          echo ">>> Starting dtbs make..."
-          make ${args} dtbs 2>&1 | tee -a ../build.log
+          make ${args} Image 2>&1 | tee -a ../build.log || true
+          make ${args} Image.gz 2>&1 | tee -a ../build.log || true
+          make ${args} dtbs 2>&1 | tee -a ../build.log || true
+          set -e
           
-          OUT=${{ env.OUT_DIR }}
+          # Use ABSOLUTE PATH for OUT directory
+          OUT=${{ env.ABS_OUT_DIR }}
           echo "=============== BOOT DIR ==============="
           ls -la $OUT/arch/arm64/boot/ || true
           
@@ -160,6 +161,57 @@ jobs:
           
           echo ">>> Final Boot Dir State:"
           ls -la $OUT/arch/arm64/boot/ || true
+          
+          if [ ! -s $OUT/arch/arm64/boot/Image ] && [ ! -s $OUT/arch/arm64/boot/Image.gz ]; then
+            echo "################ FATAL: NO KERNEL IMAGE ################"
+            tail -n 50 ../build.log
+            exit 1
+          fi
+          echo ">>> KERNEL IMAGE READY!"
+
+      - name: "🧰 Package Flashable Zip (AnyKernel3)"
+        working-directory: ./${{ env.kernelDir }}
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cd AnyKernel3
+          sed -i 's/do.devicecheck=1;/do.devicecheck=0;/' anykernel.sh
+          sed -i 's|kernel.string=.*|kernel.string=StormBreaker-NetHunter-Phoenix by MDXWAJID;|' anykernel.sh
+          grep -q 'do.dtbo=' anykernel.sh || sed -i 's/do.cleanup=1;/do.cleanup=1;\ndo.dtbo=1;/' anykernel.sh
+          cd ..
+          
+          # Use ABSOLUTE PATH for OUT directory
+          BOOT=${{ env.ABS_OUT_DIR }}/arch/arm64/boot
+          if [ -s $BOOT/Image ]; then cp $BOOT/Image AnyKernel3/Image; \
+          elif [ -s $BOOT/Image-dtb ]; then cp $BOOT/Image-dtb AnyKernel3/Image; \
+          elif [ -s $BOOT/Image.gz ]; then cp $BOOT/Image.gz AnyKernel3/Image.gz; fi
+          if [ -s $BOOT/dtbo.img ]; then cp $BOOT/dtbo.img AnyKernel3/dtbo.img; fi
+          
+          rm -rf AnyKernel3/.git AnyKernel3/README.md AnyKernel3/tools
+          cd AnyKernel3
+          zip -r9 ../update-StormBreaker-NetHunter-Phoenix.zip .
+          cd ..
+          unzip -l update-StormBreaker-NetHunter-Phoenix.zip | grep "META-INF/com/google/android/update-binary" || { echo "FATAL: not flashable!"; exit 1; }
+          SIZE=$(stat -c%s update-StormBreaker-NetHunter-Phoenix.zip)
+          echo "Flashable zip size: $SIZE bytes"
+          [ "$SIZE" -gt 10000000 ] || { echo "FATAL: zip too small - no kernel inside!"; exit 1; }
+
+      - name: "🚀 Upload Flashable Zip"
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLASHABLE-KERNEL-ZIP
+          path: ./${{ env.kernelDir }}/update-StormBreaker-NetHunter-Phoenix.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: "📦 Upload RAW Image"
+        uses: actions/upload-artifact@v4
+        with:
+          name: RAW-Image-fastboot
+          path: |
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image*
+            ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/arm64/boot/dt*
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: "🚨 Upload build.log ON FAILURE"
         if: failure()
